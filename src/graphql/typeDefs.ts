@@ -472,6 +472,7 @@ export const typeDefs = `#graphql
     maxPoints: Int
     color: String
     benefits: [String]
+    isActive: Boolean
   }
 
   # ─── Queries ─────────────────────────────────────────────────────────────────
@@ -611,7 +612,7 @@ export const typeDefs = `#graphql
 
     # Points Tiers
     createPointsTier(input: PointsTierInput!): PointsTier
-    updatePointsTier(id: ID!, name: String, color: String, benefits: [String]): PointsTier
+    updatePointsTier(id: ID!, name: String, role: String, minPoints: Int, maxPoints: Int, color: String, benefits: [String], isActive: Boolean): PointsTier
     deletePointsTier(id: ID!): Boolean
 
     # Admin - Award Points

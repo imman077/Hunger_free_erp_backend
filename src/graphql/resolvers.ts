@@ -631,9 +631,13 @@ export const resolvers = {
 
       // Seed Points Tiers
       await PointsTier.create([
-        { name: 'Bronze', role: 'DONOR', minPoints: 0, maxPoints: 999, color: '#cd7f32', benefits: ['5% bonus on donations', 'Access to basic rewards'], isActive: true },
-        { name: 'Silver', role: 'DONOR', minPoints: 1000, maxPoints: 4999, color: '#c0c0c0', benefits: ['10% bonus points', 'Priority support', 'Exclusive silver rewards'], isActive: true },
-        { name: 'Gold', role: 'DONOR', minPoints: 5000, color: '#ffd700', benefits: ['15% bonus points', 'VIP events access', 'Gold catalog access'], isActive: true },
+        { name: 'Beginner', role: 'DONOR', minPoints: 0, maxPoints: 500, color: '#64748b', benefits: ['Welcome Pack', 'Forum Access', 'Standard Support'], isActive: true },
+        { name: 'Bronze', role: 'DONOR', minPoints: 501, maxPoints: 1500, color: '#92400e', benefits: ['Verified Badge', '5% Multiplier', 'Raffle Entry'], isActive: true },
+        { name: 'Silver', role: 'DONOR', minPoints: 1501, maxPoints: 3500, color: '#475569', benefits: ['Silver Badge', 'Priority Pickup', 'Impact Reports'], isActive: true },
+        { name: 'Gold', role: 'DONOR', minPoints: 3501, maxPoints: 7500, color: '#b45309', benefits: ['Gold Badge', 'VIP Event Invites', 'Direct Support'], isActive: true },
+        { name: 'Platinum', role: 'DONOR', minPoints: 7501, maxPoints: 15000, color: '#4338ca', benefits: ['Platinum Badge', 'Exclusive Gear', 'Impact Manager'], isActive: true },
+        { name: 'Diamond', role: 'DONOR', minPoints: 15001, maxPoints: 30000, color: '#0891b2', benefits: ['Diamond Badge', 'Featured Profile', 'Milestone Gifts'], isActive: true },
+        { name: 'Legend', role: 'DONOR', minPoints: 30001, color: '#059669', benefits: ['Legend Badge', '10 Trees/mo', 'Global All-Access'], isActive: true },
         { name: 'Starter', role: 'NGO', minPoints: 0, maxPoints: 1999, color: '#6b7280', benefits: ['Basic platform access'], isActive: true },
         { name: 'Silver', role: 'NGO', minPoints: 2000, color: '#c0c0c0', benefits: ['Grant eligibility', 'Priority listing'], isActive: true },
         { name: 'Rising', role: 'VOLUNTEER', minPoints: 0, maxPoints: 499, color: '#10b981', benefits: ['Task access', 'Basic rewards'], isActive: true },
