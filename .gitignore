@@ -18,11 +18,3 @@ Thumbs.db
 dist/
 build/
 out/
-
-# Python / Project Local Cache & Credentials
-__pycache__/
-*.pyc
-cloud_url.txt
-firebase-credentials.json
-credentials.json
-token.json
