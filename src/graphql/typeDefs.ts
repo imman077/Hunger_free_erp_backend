@@ -136,6 +136,7 @@ export const typeDefs = `#graphql
     quantity: String!
     ngo: String
     donor: String
+    donorDetails: User
     date: String!
     status: String!
     pickupAddress: String
@@ -151,6 +152,27 @@ export const typeDefs = `#graphql
     isNgoNeed: Boolean
     relatedNeed: String
     createdAt: String
+  }
+
+  type DonationDraft {
+    id: ID!
+    userId: String!
+    foodType: String
+    category: String
+    dietaryType: String
+    preparationType: String
+    quantity: String
+    ngo: String
+    donor: String
+    date: String
+    pickupAddress: String
+    deliveryAddress: String
+    description: String
+    expiryTime: String
+    image: String
+    relatedNeed: String
+    createdAt: String
+    updatedAt: String
   }
 
   type NeedSupporterInfo {
@@ -377,6 +399,23 @@ export const typeDefs = `#graphql
     relatedNeed: String
   }
 
+  input DonationDraftInput {
+    foodType: String
+    category: String
+    dietaryType: String
+    preparationType: String
+    quantity: String
+    ngo: String
+    donor: String
+    date: String
+    pickupAddress: String
+    deliveryAddress: String
+    description: String
+    expiryTime: String
+    image: String
+    relatedNeed: String
+  }
+
   input CreateNeedInput {
     ngo: String!
     itemName: String!
@@ -491,6 +530,7 @@ export const typeDefs = `#graphql
 
     # NGO
     needs(ngoId: String, status: String): [Need]
+    need(id: ID!): Need
     needById(id: ID!): Need
     inventory(ngoId: String): [Inventory]
 
@@ -511,6 +551,7 @@ export const typeDefs = `#graphql
 
     # Milestones & Badges
     milestones(category: String): [Milestone]
+    gamificationTiers(role: String): [GamificationTier!]!
 
     # Points Tiers
     pointsTiers(role: String): [PointsTier]
@@ -520,6 +561,8 @@ export const typeDefs = `#graphql
 
     # Volunteer Tasks (donations pending pickup)
     volunteerTasks(volunteerId: String): [Donation]
+
+    donationDraft(userId: ID!): DonationDraft
 
     hello: String
   }
@@ -618,7 +661,22 @@ export const typeDefs = `#graphql
     # Admin - Award Points
     awardPoints(userId: ID!, points: Int!, reason: String!): User
 
+    # Donation Drafts
+    saveDonationDraft(userId: ID!, input: DonationDraftInput!): DonationDraft
+    clearDonationDraft(userId: ID!): Boolean
+
     # Seed
     seedData: String
+  }
+
+  type GamificationTier {
+    id: ID!
+    name: String!
+    role: String!
+    range: String!
+    bonus: String!
+    pointsRequired: Int!
+    perks: String!
+    color: String!
   }
 `;

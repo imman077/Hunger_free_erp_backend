@@ -8,6 +8,8 @@ import { Enquiry } from '../models/Enquiry';
 import { LuckySpinPrize, LuckySpinDraw } from '../models/LuckySpin';
 // Payment models embedded in User — no separate import needed
 import { ConfigItem, CategorySuggestion, Milestone, PointsTier, RewardClaim } from '../models/Config';
+import { GamificationTier } from '../models/GamificationTier';
+import { DonationDraft } from '../models/DonationDraft';
 
 const fmt = (doc: any) => doc ? { ...doc.toObject(), id: doc._id.toString() } : null;
 const fmtAll = (docs: any[]) => docs.map(fmt);
@@ -84,6 +86,7 @@ export const resolvers = {
       return fmtAll(await Need.find(q));
     },
     needById: async (_: any, { id }: any) => fmt(await Need.findById(id)),
+    need: async (_: any, { id }: any) => fmt(await Need.findById(id)),
 
     inventory: async (_: any, { ngoId }: any) => fmtAll(await Inventory.find(ngoId ? { ngo: ngoId } : {})),
 
@@ -109,6 +112,7 @@ export const resolvers = {
     categorySuggestions: async (_: any, { type }: any) => fmtAll(await CategorySuggestion.find(type ? { type, isActive: true } : { isActive: true })),
     milestones: async (_: any, { category }: any) => fmtAll(await Milestone.find(category ? { category: mapRoleToMilestoneCategory(category) as any } : {})),
     pointsTiers: async (_: any, { role }: any) => fmtAll(await PointsTier.find(role ? { role: mapRoleToPointsTierRole(role) as any } : {})),
+    gamificationTiers: async (_: any, { role }: any) => fmtAll(await GamificationTier.find(role ? { role: mapRoleToPointsTierRole(role) as any } : {}).sort({ pointsRequired: 1 })),
 
     volunteerTasks: async () => fmtAll(await Donation.find({ status: { $in: ['PENDING', 'IN_TRANSIT'] } })),
 
@@ -124,6 +128,15 @@ export const resolvers = {
         ])
       ]);
       return { totalDonations: total, pendingCount: pending, completedCount: completed, inProgressCount: inProgress, totalByCategory: categories };
+    },
+
+    donationDraft: async (_: any, { userId }: any) => {
+      try {
+        return fmt(await DonationDraft.findOne({ userId }));
+      } catch (err) {
+        console.error("Error fetching donation draft:", err);
+        return null;
+      }
     },
   },
 
@@ -424,7 +437,7 @@ export const resolvers = {
         Inventory.deleteMany({}), LuckySpinPrize.deleteMany({}), LuckySpinDraw.deleteMany({}),
         Reward.deleteMany({}), Enquiry.deleteMany({}), ConfigItem.deleteMany({}),
         CategorySuggestion.deleteMany({}), Milestone.deleteMany({}), PointsTier.deleteMany({}),
-        RewardClaim.deleteMany({})
+        RewardClaim.deleteMany({}), GamificationTier.deleteMany({})
       ]);
 
       // Seed Users
@@ -512,12 +525,35 @@ export const resolvers = {
 
       // Seed Lucky Spin Prizes
       await LuckySpinPrize.create([
-        { role: 'DONOR', label: '500 Bonus Points', prizeType: 'POINTS', value: 500, icon: 'star', probability: 0.3, isActive: true },
-        { role: 'DONOR', label: '₹200 Voucher', prizeType: 'VOUCHER', value: 200, icon: 'gift', probability: 0.1, isActive: true },
+        // DONOR (8 prizes)
+        { role: 'DONOR', label: '500 Bonus Points', prizeType: 'POINTS', value: 500, icon: 'star', probability: 0.30, isActive: true },
+        { role: 'DONOR', label: '₹200 Voucher', prizeType: 'VOUCHER', value: 200, icon: 'gift', probability: 0.10, isActive: true },
+        { role: 'DONOR', label: '1,000 Points', prizeType: 'POINTS', value: 1000, icon: 'star', probability: 0.20, isActive: true },
+        { role: 'DONOR', label: '₹500 Cash', prizeType: 'CASH', value: 500, icon: 'cash', probability: 0.05, isActive: true },
+        { role: 'DONOR', label: 'Try Again', prizeType: 'POINTS', value: 0, icon: 'zap', probability: 0.15, isActive: true },
+        { role: 'DONOR', label: '200 Points', prizeType: 'POINTS', value: 200, icon: 'star', probability: 0.10, isActive: true },
+        { role: 'DONOR', label: '₹100 Voucher', prizeType: 'VOUCHER', value: 100, icon: 'gift', probability: 0.05, isActive: true },
+        { role: 'DONOR', label: 'GRAND JACKPOT', prizeType: 'VOUCHER', value: 5000, icon: 'gift', probability: 0.05, isActive: true },
+
+        // NGO (8 prizes)
         { role: 'NGO', label: '₹25,000 Grant', prizeType: 'GRANT', value: 25000, icon: 'gift', probability: 0.05, isActive: true },
         { role: 'NGO', label: '5,000 Points', prizeType: 'POINTS', value: 5000, icon: 'star', probability: 0.25, isActive: true },
-        { role: 'VOLUNTEER', label: '₹500 Fuel', prizeType: 'CASH', value: 500, icon: 'zap', probability: 0.2, isActive: true },
-        { role: 'VOLUNTEER', label: '1,000 Points', prizeType: 'POINTS', value: 1000, icon: 'star', probability: 0.35, isActive: true }
+        { role: 'NGO', label: '2,000 Points', prizeType: 'POINTS', value: 2000, icon: 'star', probability: 0.20, isActive: true },
+        { role: 'NGO', label: '₹10,000 Grant', prizeType: 'GRANT', value: 10000, icon: 'gift', probability: 0.10, isActive: true },
+        { role: 'NGO', label: '500 Points', prizeType: 'POINTS', value: 500, icon: 'star', probability: 0.15, isActive: true },
+        { role: 'NGO', label: 'Try Again', prizeType: 'POINTS', value: 0, icon: 'zap', probability: 0.10, isActive: true },
+        { role: 'NGO', label: '1,000 Points', prizeType: 'POINTS', value: 1000, icon: 'star', probability: 0.10, isActive: true },
+        { role: 'NGO', label: 'GRAND JACKPOT', prizeType: 'GRANT', value: 100000, icon: 'gift', probability: 0.05, isActive: true },
+
+        // VOLUNTEER (8 prizes)
+        { role: 'VOLUNTEER', label: '₹500 Fuel', prizeType: 'CASH', value: 500, icon: 'zap', probability: 0.20, isActive: true },
+        { role: 'VOLUNTEER', label: '1,000 Points', prizeType: 'POINTS', value: 1000, icon: 'star', probability: 0.35, isActive: true },
+        { role: 'VOLUNTEER', label: '₹200 Fuel', prizeType: 'CASH', value: 200, icon: 'zap', probability: 0.15, isActive: true },
+        { role: 'VOLUNTEER', label: '500 Points', prizeType: 'POINTS', value: 500, icon: 'star', probability: 0.10, isActive: true },
+        { role: 'VOLUNTEER', label: '2,000 Points', prizeType: 'POINTS', value: 2000, icon: 'star', probability: 0.05, isActive: true },
+        { role: 'VOLUNTEER', label: '₹1,000 Cash', prizeType: 'CASH', value: 1000, icon: 'cash', probability: 0.05, isActive: true },
+        { role: 'VOLUNTEER', label: 'Try Again', prizeType: 'POINTS', value: 0, icon: 'zap', probability: 0.05, isActive: true },
+        { role: 'VOLUNTEER', label: 'GRAND JACKPOT', prizeType: 'CASH', value: 5000, icon: 'gift', probability: 0.05, isActive: true }
       ]);
 
       // Seed Config Items (dropdown options)
@@ -650,7 +686,49 @@ export const resolvers = {
         { name: 'Priya NGO', email: 'priya@ngo.org', subject: 'Partnership inquiry', message: 'We would like to become an official NGO partner.', role: 'NGO', status: 'Unread' }
       ]);
 
+      // Seed Gamification Tiers
+      await GamificationTier.create([
+        // --- DONOR TIERS ---
+        { name: "Beginner", role: "DONOR", range: "0 - 500", bonus: "0%", pointsRequired: 0, perks: "Welcome Pack, Forum Access, Standard Support", color: "#64748b" },
+        { name: "Bronze", role: "DONOR", range: "501 - 1,500", bonus: "5%", pointsRequired: 501, perks: "Verified Badge, 5% Multiplier, Raffle Entry", color: "#92400e" },
+        { name: "Silver", role: "DONOR", range: "1,501 - 3,500", bonus: "10%", pointsRequired: 1501, perks: "Silver Badge, Priority Pickup, Impact Reports", color: "#475569" },
+        { name: "Gold", role: "DONOR", range: "3,501 - 7,500", bonus: "15%", pointsRequired: 3501, perks: "Gold Badge, VIP Event Invites, Direct Support", color: "#b45309" },
+        { name: "Platinum", role: "DONOR", range: "7,501 - 15,000", bonus: "20%", pointsRequired: 7501, perks: "Platinum Badge, Exclusive Gear, Impact Manager", color: "#4338ca" },
+        { name: "Diamond", role: "DONOR", range: "15,001 - 30,000", bonus: "25%", pointsRequired: 15001, perks: "Diamond Badge, Featured Profile, Milestone Gifts", color: "#0891b2" },
+        { name: "Legend", role: "DONOR", range: "30,001+", bonus: "40%", pointsRequired: 30001, perks: "Legend Badge, 10 Trees/mo, Global All-Access", color: "#059669" },
+        // --- NGO TIERS ---
+        { name: "Starter", role: "NGO", range: "0 - 1,999", bonus: "0%", pointsRequired: 0, perks: "Basic platform access", color: "#6b7280" },
+        { name: "Silver", role: "NGO", range: "2,000+", bonus: "10%", pointsRequired: 2000, perks: "Grant eligibility, Priority listing", color: "#c0c0c0" },
+        // --- VOLUNTEER TIERS ---
+        { name: "Rising", role: "VOLUNTEER", range: "0 - 499", bonus: "0%", pointsRequired: 0, perks: "Task access, Basic rewards", color: "#10b981" },
+        { name: "Elite", role: "VOLUNTEER", range: "500+", bonus: "15%", pointsRequired: 500, perks: "Priority tasks, Fuel card eligibility", color: "#f59e0b" },
+      ]);
+
       return 'All collections seeded successfully!';
+    },
+
+    saveDonationDraft: async (_: any, { userId, input }: any) => {
+      try {
+        const draft = await DonationDraft.findOneAndUpdate(
+          { userId },
+          { $set: { ...input, userId } },
+          { new: true, upsert: true }
+        );
+        return fmt(draft);
+      } catch (err) {
+        console.error("Error saving donation draft:", err);
+        throw err;
+      }
+    },
+
+    clearDonationDraft: async (_: any, { userId }: any) => {
+      try {
+        await DonationDraft.findOneAndDelete({ userId });
+        return true;
+      } catch (err) {
+        console.error("Error clearing donation draft:", err);
+        return false;
+      }
     }
   },
   Need: {
@@ -701,6 +779,30 @@ export const resolvers = {
   Donation: {
     isNgoNeed: (donation: any) => {
       return !!donation.relatedNeed;
+    },
+    donorDetails: async (donation: any) => {
+      if (!donation.donor) return null;
+      try {
+        if (mongoose.Types.ObjectId.isValid(donation.donor)) {
+          return fmt(await User.findById(donation.donor));
+        } else {
+          return fmt(await User.findOne({ username: donation.donor }));
+        }
+      } catch (err) {
+        console.error("Error resolving donorDetails:", err);
+        return null;
+      }
+    }
+  },
+  User: {
+    donorProfile: (user: any) => {
+      return user.role === 'DONOR' ? user.donorProfile : null;
+    },
+    ngoProfile: (user: any) => {
+      return user.role === 'NGO' ? user.ngoProfile : null;
+    },
+    volunteerProfile: (user: any) => {
+      return user.role === 'VOLUNTEER' ? user.volunteerProfile : null;
     }
   }
 };

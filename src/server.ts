@@ -4,6 +4,11 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import { typeDefs } from './graphql/typeDefs';
 import { resolvers } from './graphql/resolvers';
+import { startRestServer } from './rest/restServer';
+import { GamificationTier } from './models/GamificationTier';
+import { Milestone } from './models/Config';
+import { gamificationTiersData } from './seed_gamification_tiers';
+import { milestonesData } from './seed_milestones';
 
 dotenv.config();
 
@@ -16,6 +21,8 @@ async function startServer() {
   // Set up Mongoose connection event listeners
   mongoose.connection.on('connected', () => {
     console.log('✅ MongoDB is connected successfully');
+    // Start Express REST server on port 8000
+    startRestServer(8000);
   });
   mongoose.connection.on('error', (err) => {
     console.error('❌ MongoDB connection error:', err);
@@ -28,10 +35,25 @@ async function startServer() {
     console.log('⏳ Connecting to MongoDB...');
     await mongoose.connect(MONGODB_URI, { serverSelectionTimeoutMS: 5000 });
 
-    // Auto-seed on startup
-    const seedFn = resolvers.Mutation.seedData as () => Promise<string>;
-    const seedResult = await seedFn();
-    console.log(`🌱 ${seedResult}`);
+    // Auto-seed on startup if collections are empty
+    const [tierCount, milestoneCount] = await Promise.all([
+      GamificationTier.countDocuments(),
+      Milestone.countDocuments(),
+    ]);
+
+    if (tierCount === 0) {
+      await GamificationTier.insertMany(gamificationTiersData);
+      console.log('🌱 Gamification tiers auto-seeded.');
+    } else {
+      console.log('✅ Gamification tiers already seeded. Skipping auto-seed.');
+    }
+
+    if (milestoneCount === 0) {
+      await Milestone.insertMany(milestonesData);
+      console.log('🌱 Milestones auto-seeded.');
+    } else {
+      console.log('✅ Milestones already seeded. Skipping auto-seed.');
+    }
 
     const { url } = await startStandaloneServer(server, {
       listen: { port: Number(PORT) },
@@ -44,3 +66,4 @@ async function startServer() {
 }
 
 startServer();
+// Trigger reload comment

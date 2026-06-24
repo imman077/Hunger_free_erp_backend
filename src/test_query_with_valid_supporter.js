@@ -8,8 +8,8 @@ async function run() {
   console.log('Connected to MongoDB');
   
   // 1. Update the need supporterIds to use the actual seeded donor ID
-  const needId = '6a198a6344c66510f4881395';
-  const donorId = '6a198a6344c66510f4881376';
+  const needId = '6a19bd8080064a1fc2195a2d';
+  const donorId = '6a1939fe875b850d3dd88b6b';
   
   await mongoose.connection.db.collection('needs').updateOne(
     { _id: new mongoose.Types.ObjectId(needId) },
@@ -58,9 +58,7 @@ async function run() {
     res.on('data', (chunk) => body += chunk);
     res.on('end', () => {
       console.log('\n--- GraphQL Response ---');
-      const parsed = JSON.parse(body);
-      const riceNeed = parsed.data.needs.find(n => n.id === needId);
-      console.log(JSON.stringify(riceNeed, null, 2));
+      console.log(body);
     });
   });
 
