@@ -11,7 +11,26 @@ import { ConfigItem, CategorySuggestion, Milestone, PointsTier, RewardClaim } fr
 import { GamificationTier } from '../models/GamificationTier';
 import { DonationDraft } from '../models/DonationDraft';
 
-const fmt = (doc: any) => doc ? { ...doc.toObject(), id: doc._id.toString() } : null;
+const fmt = (doc: any) => {
+  if (!doc) return null;
+  const obj = doc.toObject ? doc.toObject() : doc;
+  obj.id = obj._id ? obj._id.toString() : obj.id;
+  if (obj.paymentMethods) {
+    if (obj.paymentMethods.bankAccounts) {
+      obj.paymentMethods.bankAccounts = obj.paymentMethods.bankAccounts.map((b: any) => ({
+        ...b,
+        id: b._id ? b._id.toString() : b.id
+      }));
+    }
+    if (obj.paymentMethods.upiIds) {
+      obj.paymentMethods.upiIds = obj.paymentMethods.upiIds.map((u: any) => ({
+        ...u,
+        id: u._id ? u._id.toString() : u.id
+      }));
+    }
+  }
+  return obj;
+};
 const fmtAll = (docs: any[]) => docs.map(fmt);
 
 const mapRoleToPointsTierRole = (val: string) => {
@@ -54,9 +73,9 @@ export const resolvers = {
     },
 
     users: async (_: any, { role }: any) => fmtAll(await User.find(role ? { role: mapRoleToPointsTierRole(role) as any } : {})),
-    userById: async (_: any, { id }: any) => {
-      if (!mongoose.Types.ObjectId.isValid(id)) return null;
-      return fmt(await User.findById(id));
+    userById: async (_: any, { userId }: any) => {
+      if (!mongoose.Types.ObjectId.isValid(userId)) return null;
+      return fmt(await User.findById(userId));
     },
 
     donations: async (_: any, { userId, status, sortOrder }: any) => {
@@ -171,7 +190,13 @@ export const resolvers = {
     },
 
     updateDonorProfile: async (_: any, { userId, input }: any) => {
-      const user = await User.findByIdAndUpdate(userId, { $set: { donorProfile: input } }, { new: true });
+      const updateData: any = {};
+      const { username, ...donorProfileFields } = input;
+      if (username) {
+        updateData.username = username;
+      }
+      updateData.donorProfile = donorProfileFields;
+      const user = await User.findByIdAndUpdate(userId, { $set: updateData }, { new: true });
       return fmt(user);
     },
 
@@ -443,9 +468,24 @@ export const resolvers = {
       // Seed Users
       const donor = await User.create({
         _id: new mongoose.Types.ObjectId('6a1939fe875b850d3dd88b6b'),
-        username: 'star_hotel', email: 'info@starhotel.com', role: 'DONOR', isVerified: true,
+        username: 'Star Hotel', email: 'info@starhotel.com', role: 'DONOR', isVerified: true,
         phone: '9876543210',
-        donorProfile: { businessName: 'The Star Grand Hotel', businessType: 'Hotel', subCategory: '5-STAR HOTEL', verificationLevel: 'Level III', registrationId: 'REG-998877', profileCompleteness: 95 },
+        donorProfile: {
+          businessName: 'The Star Grand Hotel',
+          businessType: 'Hotel',
+          subCategory: '5-STAR HOTEL',
+          verificationLevel: 'Level III',
+          registrationId: 'REG-998877',
+          profileCompleteness: 95,
+          taxId: 'TAX-112233',
+          address: {
+            line1: '123 Luxury Suite Blvd',
+            city: 'Mumbai',
+            state: 'Maharashtra',
+            postalCode: '400001',
+            country: 'India'
+          }
+        },
         gamification: { points: 1200, lifetimePoints: 3500 },
         paymentMethods: { bankAccounts: [{ bankName: 'HDFC Bank', accountHolder: 'Star Hotels Pvt Ltd', accountNumber: '50100111222333', ifscCode: 'HDFC0001111', isPrimary: true }], upiIds: [{ vpa: 'starhotel@okhdfc', label: 'Primary', isPrimary: true }] }
       });
@@ -796,7 +836,41 @@ export const resolvers = {
   },
   User: {
     donorProfile: (user: any) => {
-      return user.role === 'DONOR' ? user.donorProfile : null;
+      if (user.role !== 'DONOR' || !user.donorProfile) return null;
+
+      const docs = [];
+      const joinedDate = user.createdAt ? new Date(user.createdAt).toLocaleDateString('en-IN') : 'Jan 2025';
+
+      if (user.donorProfile.registrationId) {
+        docs.push({
+          name: 'Business License',
+          status: user.isVerified ? 'Verified' : 'In Review',
+          date: joinedDate,
+          url: '/HungerFree Doc.pdf'
+        });
+      }
+
+      if (user.donorProfile.taxId) {
+        docs.push({
+          name: 'Tax Registration',
+          status: user.isVerified ? 'Verified' : 'In Review',
+          date: joinedDate,
+          url: '/HungerFree Doc.pdf'
+        });
+      }
+
+      docs.push({
+        name: 'Food Safety Cert',
+        status: user.donorProfile.verificationLevel === 'Level III' ? 'Verified' : 'In Review',
+        date: user.isVerified ? (user.updatedAt ? new Date(user.updatedAt).toLocaleDateString('en-IN') : 'Jan 2025') : 'Pending',
+        url: '/HungerFree Doc.pdf'
+      });
+
+      const profileObj = user.donorProfile.toObject ? user.donorProfile.toObject() : user.donorProfile;
+      return {
+        ...profileObj,
+        documents: docs
+      };
     },
     ngoProfile: (user: any) => {
       return user.role === 'NGO' ? user.ngoProfile : null;

@@ -25,6 +25,28 @@ const fmt = (doc: any) => {
 
 const fmtAll = (docs: any[]) => docs.map(fmt);
 
+const formatPaymentMethods = (paymentMethods: any) => {
+  return {
+    bankAccounts: (paymentMethods?.bankAccounts || []).map((b: any) => ({
+      id: b._id ? b._id.toString() : (b.id ? b.id.toString() : ''),
+      bankName: b.bankName || '',
+      accountHolder: b.accountHolder || '',
+      accountNumber: b.accountNumber || '',
+      ifscCode: b.ifscCode || '',
+      isPrimary: b.isPrimary || false,
+      isVerified: b.isVerified || false
+    })),
+    upiIds: (paymentMethods?.upiIds || []).map((u: any) => ({
+      id: u._id ? u._id.toString() : (u.id ? u.id.toString() : ''),
+      vpa: u.vpa || '',
+      label: u.label || 'Primary',
+      isPrimary: u.isPrimary || false,
+      isVerified: u.isVerified !== undefined ? u.isVerified : true
+    }))
+  };
+};
+
+
 export function startRestServer(port: number) {
   const app = express();
 
@@ -403,11 +425,16 @@ export function startRestServer(port: number) {
         businessType: user.donorProfile?.businessType || '',
         registrationId: user.donorProfile?.registrationId || '',
         taxId: user.donorProfile?.taxId || '',
+        legalName: user.donorProfile?.legalName || '',
+        website: user.donorProfile?.website || '',
+        entityType: user.donorProfile?.entityType || '',
         name: user.username,
         email: user.email,
         phone: user.phone || '',
+        alternateContact: user.donorProfile?.alternateContact || '',
+        address: user.donorProfile?.address || {},
         location: user.donorProfile?.address?.line1 || '',
-        memberSince: 'January 2025',
+        memberSince: user.createdAt?.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }) || 'January 2025',
         verificationLevel: user.donorProfile?.verificationLevel || 'Level I',
         completion: user.donorProfile?.profileCompleteness || 80,
         bankName: user.paymentMethods?.bankAccounts?.[0]?.bankName || null,
@@ -426,6 +453,102 @@ export function startRestServer(port: number) {
       if (!user) return res.status(404).json({ message: 'Donor user not found' });
       const updated = await User.findByIdAndUpdate(user._id, { $set: { donorProfile: req.body } }, { new: true });
       res.json(fmt(updated));
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ─── Donor Dashboard: Stats, Recent Activities, Documents ───
+  app.get('/api/donor-profiles/me/dashboard/', async (req: AuthenticatedRequest, res) => {
+    try {
+      const user = req.user || await User.findOne({ role: 'DONOR' });
+      if (!user) return res.status(404).json({ message: 'Donor not found' });
+
+      // Get donation stats for this donor
+      const donorName = user.donorProfile?.businessName || user.username;
+      const [total, pending, completed, inProgress] = await Promise.all([
+        Donation.countDocuments({ donor: donorName }),
+        Donation.countDocuments({ donor: donorName, status: 'PENDING' }),
+        Donation.countDocuments({ donor: donorName, status: { $in: ['DELIVERED', 'Collected', 'COMPLETED'] } }),
+        Donation.countDocuments({ donor: donorName, status: { $in: ['ASSIGNED', 'PICKED_UP', 'In Transit', 'ACCEPTED'] } })
+      ]);
+
+      // Get 5 most recent donations as activities
+      const recent = await Donation.find({ donor: donorName }).sort({ createdAt: -1 }).limit(5);
+      const recentActivities = recent.map((d: any) => ({
+        id: d._id.toString(),
+        title: d.foodType,
+        ngo: d.ngo || 'Pending NGO',
+        time: d.createdAt ? new Date(d.createdAt).toLocaleDateString('en-IN') : 'Recently',
+        status: d.status === 'DELIVERED' ? 'Collected' : d.status === 'PICKED_UP' ? 'In Transit' : d.status,
+        category: d.category
+      }));
+
+      res.json({
+        currentPoints: user.gamification?.points || 0,
+        stats: [
+          {
+            title: 'Total Donations',
+            value: total.toString(),
+            change: `+${inProgress} in progress`,
+            color: '#22c55e'
+          },
+          {
+            title: 'Impact Points',
+            value: (user.gamification?.points || 0).toLocaleString('en-IN'),
+            change: `${completed} completed`,
+            color: '#22c55e'
+          }
+        ],
+        recentActivities,
+        donationStats: {
+          totalDonations: total,
+          pendingCount: pending,
+          completedCount: completed,
+          inProgressCount: inProgress
+        }
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get('/api/donor-profiles/me/documents/', async (req: AuthenticatedRequest, res) => {
+    try {
+      const user = req.user || await User.findOne({ role: 'DONOR' });
+      if (!user) return res.status(404).json({ message: 'Donor not found' });
+
+      // Documents are derived from profile verification status
+      // Return structured document list based on what the donor has configured
+      const docs = [];
+
+      if (user.donorProfile?.registrationId) {
+        docs.push({
+          name: 'Business License',
+          status: user.isVerified ? 'Verified' : 'In Review',
+          date: user.createdAt ? new Date(user.createdAt).toLocaleDateString('en-IN') : 'Jan 2025',
+          url: '/HungerFree Doc.pdf'
+        });
+      }
+
+      if (user.donorProfile?.taxId) {
+        docs.push({
+          name: 'Tax Registration',
+          status: user.isVerified ? 'Verified' : 'In Review',
+          date: user.createdAt ? new Date(user.createdAt).toLocaleDateString('en-IN') : 'Jan 2025',
+          url: '/HungerFree Doc.pdf'
+        });
+      }
+
+      // Add food safety cert as pending if not fully verified
+      docs.push({
+        name: 'Food Safety Cert',
+        status: user.donorProfile?.verificationLevel === 'Level III' ? 'Verified' : 'In Review',
+        date: user.isVerified ? (user.updatedAt ? new Date(user.updatedAt).toLocaleDateString('en-IN') : 'Jan 2025') : 'Pending',
+        url: '/HungerFree Doc.pdf'
+      });
+
+      res.json(docs);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -478,7 +601,8 @@ export function startRestServer(port: number) {
   app.get('/api/donor-profiles/me/payment-methods/', async (req: AuthenticatedRequest, res) => {
     try {
       const user = req.user || await User.findOne({ role: 'DONOR' });
-      res.json(user.paymentMethods || {});
+      if (!user) return res.status(404).json({ message: 'User not found' });
+      res.json(formatPaymentMethods(user.paymentMethods));
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -498,7 +622,7 @@ export function startRestServer(port: number) {
         updatedUser = user;
       }
       if (!updatedUser) return res.status(404).json({ message: 'User not found' });
-      res.json(updatedUser.paymentMethods || {});
+      res.json(formatPaymentMethods(updatedUser.paymentMethods));
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -515,7 +639,100 @@ export function startRestServer(port: number) {
         }
       }, { new: true });
       if (!updatedUser) return res.status(404).json({ message: 'User not found' });
-      res.json(updatedUser.paymentMethods || {});
+      res.json(formatPaymentMethods(updatedUser.paymentMethods));
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ─── Donor Dashboard: Stats, Recent Activities ───
+  app.get('/api/donor-profiles/me/dashboard/', async (req: AuthenticatedRequest, res) => {
+    try {
+      const user = req.user || await User.findOne({ role: 'DONOR' });
+      if (!user) return res.status(404).json({ message: 'Donor not found' });
+
+      const donorName = user.donorProfile?.businessName || user.username;
+      const [total, pending, completed, inProgress] = await Promise.all([
+        Donation.countDocuments({ donor: donorName }),
+        Donation.countDocuments({ donor: donorName, status: 'PENDING' }),
+        Donation.countDocuments({ donor: donorName, status: { $in: ['DELIVERED', 'Collected', 'COMPLETED'] } }),
+        Donation.countDocuments({ donor: donorName, status: { $in: ['ASSIGNED', 'PICKED_UP', 'In Transit', 'ACCEPTED'] } })
+      ]);
+
+      // Get 5 most recent donations as recent activities
+      const recent = await Donation.find({ donor: donorName }).sort({ createdAt: -1 }).limit(5);
+      const recentActivities = recent.map((d: any) => ({
+        id: d._id.toString(),
+        title: d.foodType,
+        ngo: d.ngo || 'Pending NGO',
+        time: d.createdAt ? new Date(d.createdAt).toLocaleDateString('en-IN') : 'Recently',
+        status: d.status === 'DELIVERED' ? 'Collected' : d.status === 'PICKED_UP' ? 'In Transit' : d.status,
+        category: d.category
+      }));
+
+      res.json({
+        currentPoints: user.gamification?.points || 0,
+        stats: [
+          {
+            title: 'Total Donations',
+            value: total.toString(),
+            change: `+${inProgress} in progress`,
+            color: '#22c55e'
+          },
+          {
+            title: 'Impact Points',
+            value: (user.gamification?.points || 0).toLocaleString('en-IN'),
+            change: `${completed} completed`,
+            color: '#22c55e'
+          }
+        ],
+        recentActivities,
+        donationStats: {
+          totalDonations: total,
+          pendingCount: pending,
+          completedCount: completed,
+          inProgressCount: inProgress
+        }
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get('/api/donor-profiles/me/documents/', async (req: AuthenticatedRequest, res) => {
+    try {
+      const user = req.user || await User.findOne({ role: 'DONOR' });
+      if (!user) return res.status(404).json({ message: 'Donor not found' });
+
+      const docs = [];
+      const joinedDate = user.createdAt ? new Date(user.createdAt).toLocaleDateString('en-IN') : 'Jan 2025';
+
+      if (user.donorProfile?.registrationId) {
+        docs.push({
+          name: 'Business License',
+          status: user.isVerified ? 'Verified' : 'In Review',
+          date: joinedDate,
+          url: '/HungerFree Doc.pdf'
+        });
+      }
+
+      if (user.donorProfile?.taxId) {
+        docs.push({
+          name: 'Tax Registration',
+          status: user.isVerified ? 'Verified' : 'In Review',
+          date: joinedDate,
+          url: '/HungerFree Doc.pdf'
+        });
+      }
+
+      docs.push({
+        name: 'Food Safety Cert',
+        status: user.donorProfile?.verificationLevel === 'Level III' ? 'Verified' : 'In Review',
+        date: user.isVerified ? joinedDate : 'Pending',
+        url: '/HungerFree Doc.pdf'
+      });
+
+      res.json(docs);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

@@ -19,11 +19,16 @@ const userSchema = new mongoose.Schema({
     registrationId: String,
     profileCompleteness: { type: Number, default: 0 },
     taxId: String,
+    legalName: String,
+    website: String,
+    entityType: String,
+    alternateContact: String,
     address: {
       line1: String,
       city: String,
       state: String,
-      postalCode: String
+      postalCode: String,
+      country: String
     }
   },
 
@@ -57,12 +62,14 @@ const userSchema = new mongoose.Schema({
       accountHolder: String,
       accountNumber: String,
       ifscCode: String,
-      isPrimary: Boolean
+      isPrimary: Boolean,
+      isVerified: { type: Boolean, default: false }
     }],
     upiIds: [{
       vpa: String,
       label: String,
-      isPrimary: Boolean
+      isPrimary: Boolean,
+      isVerified: { type: Boolean, default: true }
     }]
   },
 

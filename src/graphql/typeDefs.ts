@@ -64,6 +64,13 @@ export const typeDefs = `#graphql
   }
 
   # ─── User / Auth ──────────────────────────────────────────────────────────────
+  type DonorDocument {
+    name: String
+    status: String
+    date: String
+    url: String
+  }
+
   type DonorProfile {
     businessName: String
     businessType: String
@@ -72,7 +79,12 @@ export const typeDefs = `#graphql
     registrationId: String
     profileCompleteness: Int
     taxId: String
+    legalName: String
+    website: String
+    entityType: String
+    alternateContact: String
     address: Address
+    documents: [DonorDocument]
   }
 
   type NGOStats {
@@ -271,6 +283,7 @@ export const typeDefs = `#graphql
   # ─── Enquiry ──────────────────────────────────────────────────────────────────
   type Enquiry {
     id: ID!
+    userId: String
     name: String!
     email: String!
     phone: String
@@ -353,6 +366,7 @@ export const typeDefs = `#graphql
   }
 
   input DonorProfileInput {
+    username: String
     businessName: String
     businessType: String
     subCategory: String
@@ -455,6 +469,7 @@ export const typeDefs = `#graphql
   }
 
   input EnquiryInput {
+    userId: String
     name: String!
     email: String!
     phone: String
@@ -522,7 +537,7 @@ export const typeDefs = `#graphql
     # Admin
     dashboardStats: DashboardStats
     users(role: String): [User]
-    userById(id: ID!): User
+    userById(userId: ID!): User
 
     # Donor
     donations(userId: String, status: String, sortOrder: String): [Donation]
