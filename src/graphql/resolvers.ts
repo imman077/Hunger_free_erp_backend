@@ -78,10 +78,25 @@ export const resolvers = {
       return fmt(await User.findById(userId));
     },
 
-    donations: async (_: any, { userId, status, sortOrder }: any) => {
+
+
+    donations: async (_: any, { userId, status, sortOrder, search }: any) => {
       const q: any = {};
       if (userId) q.donor = userId;
       if (status) q.status = status;
+      if (search) {
+        const regex = new RegExp(search, 'i');
+        const searchConditions: any[] = [
+          { foodType: regex },
+          { category: regex },
+          { description: regex },
+          { pickupAddress: regex }
+        ];
+        if (mongoose.Types.ObjectId.isValid(search)) {
+          searchConditions.push({ _id: search });
+        }
+        q.$or = searchConditions;
+      }
       const query = Donation.find(q);
       if (sortOrder === 'OLDEST_FIRST') {
         query.sort({ createdAt: 1 });
@@ -92,16 +107,66 @@ export const resolvers = {
     },
     donationById: async (_: any, { id }: any) => fmt(await Donation.findById(id)),
 
-    needs: async (_: any, { ngoId, status }: any) => {
-      const q: any = {};
-      if (ngoId) q.ngo = ngoId;
+    needs: async (_: any, { ngoId, status, search, urgency }: any) => {
+      const andConditions: any[] = [];
+
+      if (ngoId) andConditions.push({ ngo: ngoId });
+      
       if (status) {
         if (status === 'Open') {
-          q.status = { $in: ['Open', 'Fulfilling'] };
+          andConditions.push({ status: { $in: ['Open', 'Fulfilling'] } });
         } else {
-          q.status = status;
+          andConditions.push({ status: status });
         }
       }
+
+      if (search) {
+        const regex = new RegExp(search, 'i');
+        const searchConditions: any[] = [
+          { itemName: regex },
+          { category: regex },
+          { description: regex },
+          { urgency: regex },
+          { distributionAddress: regex },
+        ];
+        if (mongoose.Types.ObjectId.isValid(search)) {
+          searchConditions.push({ _id: search });
+        }
+
+        // Match NGO name
+        const matchedNgos = await User.find({
+          $or: [
+            { 'ngoProfile.name': regex },
+            { username: regex }
+          ]
+        });
+        if (matchedNgos.length > 0) {
+          const ngoIds = matchedNgos.map(u => u._id);
+          searchConditions.push({ ngo: { $in: ngoIds } });
+        }
+
+        andConditions.push({ $or: searchConditions });
+      }
+
+      if (urgency) {
+        if (urgency === 'HIGH') {
+          andConditions.push({ urgency: { $in: ['Urgent', 'High', 'URGENT', 'HIGH', 'High Priority', 'Urgent Priority'] } });
+        } else if (urgency === 'URGENT') {
+          andConditions.push({ urgency: { $in: ['Urgent', 'URGENT', 'Urgent Priority'] } });
+        } else if (urgency === 'MEDIUM') {
+          andConditions.push({
+            $or: [
+              { urgency: { $in: ['Medium Priority', 'Medium', 'MEDIUM'] } },
+              { urgency: { $exists: false } },
+              { urgency: null }
+            ]
+          });
+        } else if (urgency === 'LOW') {
+          andConditions.push({ urgency: { $in: ['Low Priority', 'Low', 'LOW'] } });
+        }
+      }
+
+      const q = andConditions.length > 0 ? { $and: andConditions } : {};
       return fmtAll(await Need.find(q));
     },
     needById: async (_: any, { id }: any) => fmt(await Need.findById(id)),
@@ -217,6 +282,23 @@ export const resolvers = {
       return fmt(user);
     },
 
+    updateBankAccount: async (_: any, { userId, accountId, input }: any) => {
+      const user = await User.findOneAndUpdate(
+        { _id: userId, 'paymentMethods.bankAccounts._id': accountId },
+        {
+          $set: {
+            'paymentMethods.bankAccounts.$.bankName': input.bankName,
+            'paymentMethods.bankAccounts.$.accountHolder': input.accountHolder,
+            'paymentMethods.bankAccounts.$.accountNumber': input.accountNumber,
+            'paymentMethods.bankAccounts.$.ifscCode': input.ifscCode,
+            'paymentMethods.bankAccounts.$.isPrimary': input.isPrimary !== undefined ? input.isPrimary : false,
+          }
+        },
+        { new: true }
+      );
+      return fmt(user);
+    },
+
     removeBankAccount: async (_: any, { userId, accountId }: any) => {
       const user = await User.findByIdAndUpdate(userId, { $pull: { 'paymentMethods.bankAccounts': { _id: accountId } } }, { new: true });
       return fmt(user);
@@ -224,6 +306,21 @@ export const resolvers = {
 
     addUPI: async (_: any, { userId, input }: any) => {
       const user = await User.findByIdAndUpdate(userId, { $push: { 'paymentMethods.upiIds': input } }, { new: true });
+      return fmt(user);
+    },
+
+    updateUPI: async (_: any, { userId, upiId, input }: any) => {
+      const user = await User.findOneAndUpdate(
+        { _id: userId, 'paymentMethods.upiIds._id': upiId },
+        {
+          $set: {
+            'paymentMethods.upiIds.$.vpa': input.vpa,
+            'paymentMethods.upiIds.$.label': input.label || 'Primary',
+            'paymentMethods.upiIds.$.isPrimary': input.isPrimary !== undefined ? input.isPrimary : false,
+          }
+        },
+        { new: true }
+      );
       return fmt(user);
     },
 
@@ -776,6 +873,14 @@ export const resolvers = {
       const user = await User.findById(need.ngo);
       return user?.ngoProfile?.name || user?.username || 'Helping Hands NGO';
     },
+    urgency: (need: any) => {
+      const u = need.urgency || 'Medium Priority';
+      const str = u.toLowerCase();
+      if (str.includes("urgent")) return "URGENT";
+      if (str.includes("high")) return "HIGH";
+      if (str.includes("low")) return "LOW";
+      return "MEDIUM";
+    },
     supporters: async (need: any) => {
       if (!need.supporterIds || !need.supporterIds.length) return [];
       const users = await User.find({ _id: { $in: need.supporterIds } });
@@ -876,7 +981,12 @@ export const resolvers = {
       return user.role === 'NGO' ? user.ngoProfile : null;
     },
     volunteerProfile: (user: any) => {
-      return user.role === 'VOLUNTEER' ? user.volunteerProfile : null;
+      if (user.role !== 'VOLUNTEER') return null;
+      const profile = user.volunteerProfile ? (user.volunteerProfile.toObject ? user.volunteerProfile.toObject() : user.volunteerProfile) : {};
+      return {
+        name: profile.name || user.username || 'Volunteer User',
+        ...profile
+      };
     }
   }
 };

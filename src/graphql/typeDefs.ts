@@ -1,5 +1,12 @@
 export const typeDefs = `#graphql
 
+  enum Urgency {
+    LOW
+    MEDIUM
+    HIGH
+    URGENT
+  }
+
   # ─── Shared ──────────────────────────────────────────────────────────────────
   type Timeline {
     status: String
@@ -104,6 +111,7 @@ export const typeDefs = `#graphql
   }
 
   type VolunteerProfile {
+    name: String
     zone: String
     skills: [String]
     rating: Float
@@ -202,7 +210,7 @@ export const typeDefs = `#graphql
     category: String!
     quantity: Int
     unit: String
-    urgency: String
+    urgency: Urgency
     requiredBy: String
     image: String
     distributionAddress: String
@@ -330,6 +338,7 @@ export const typeDefs = `#graphql
     activeNeeds: Int
   }
 
+
   # ─── Common Category Suggestions ─────────────────────────────────────────────
   type CategorySuggestion {
     id: ID!
@@ -383,6 +392,7 @@ export const typeDefs = `#graphql
   }
 
   input VolunteerProfileInput {
+    name: String
     zone: String
     skills: [String]
     vehicleType: String
@@ -540,11 +550,11 @@ export const typeDefs = `#graphql
     userById(userId: ID!): User
 
     # Donor
-    donations(userId: String, status: String, sortOrder: String): [Donation]
+    donations(userId: String, status: String, sortOrder: String, search: String): [Donation]
     donationById(id: ID!): Donation
 
     # NGO
-    needs(ngoId: String, status: String): [Need]
+    needs(ngoId: String, status: String, search: String, urgency: Urgency): [Need]
     need(id: ID!): Need
     needById(id: ID!): Need
     inventory(ngoId: String): [Inventory]
@@ -611,8 +621,10 @@ export const typeDefs = `#graphql
 
     # Payment Methods
     addBankAccount(userId: ID!, input: BankAccountInput!): User
+    updateBankAccount(userId: ID!, accountId: ID!, input: BankAccountInput!): User
     removeBankAccount(userId: ID!, accountId: ID!): User
     addUPI(userId: ID!, input: UPIInput!): User
+    updateUPI(userId: ID!, upiId: ID!, input: UPIInput!): User
     removeUPI(userId: ID!, upiId: ID!): User
 
     # Donations

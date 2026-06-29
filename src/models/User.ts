@@ -47,6 +47,7 @@ const userSchema = new mongoose.Schema({
   },
 
   volunteerProfile: {
+    name: String,
     zone: String,
     skills: [String],
     rating: { type: Number, default: 0.0 },

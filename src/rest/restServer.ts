@@ -264,9 +264,19 @@ export function startRestServer(port: number) {
   // ─── Admin Donations ───
   app.get('/api/admin/donations/', async (req, res) => {
     try {
-      const { status } = req.query;
+      const { status, search } = req.query;
       const query: any = {};
       if (status) query.status = status;
+      if (search) {
+        const regex = new RegExp(String(search), 'i');
+        query.$or = [
+          { donor: regex },
+          { foodType: regex },
+          { category: regex },
+          { description: regex },
+          { pickupAddress: regex }
+        ];
+      }
       const donations = await Donation.find(query);
       const formatted = donations.map((d: any) => ({
         id: d._id.toString(),
@@ -586,6 +596,12 @@ export function startRestServer(port: number) {
       const user = req.user || await User.findOne({ role: 'VOLUNTEER' });
       if (!user) return res.status(404).json({ message: 'Volunteer user not found' });
       res.json({
+        name: user.username,
+        email: user.email,
+        phone: user.phone || '',
+        bankName: user.paymentMethods?.bankAccounts?.[0]?.bankName || null,
+        accountNumber: user.paymentMethods?.bankAccounts?.[0]?.accountNumber || null,
+        upiId: user.paymentMethods?.upiIds?.[0]?.vpa || null,
         donation_points: user.gamification?.points || 0,
         zone: user.volunteerProfile?.zone || 'North Mumbai',
         vehicleType: user.volunteerProfile?.vehicleType || 'Bike',
@@ -741,12 +757,21 @@ export function startRestServer(port: number) {
   // ─── Donations lifecycle (NGO / Volunteer) ───
   app.get('/api/donations/', async (req, res) => {
     try {
-      const { marketplace, status } = req.query;
+      const { marketplace, status, search } = req.query;
       const query: any = {};
       if (marketplace === 'true') {
         query.status = 'PENDING';
       } else if (status) {
         query.status = status;
+      }
+      if (search) {
+        const regex = new RegExp(String(search), 'i');
+        query.$or = [
+          { foodType: regex },
+          { category: regex },
+          { description: regex },
+          { pickupAddress: regex }
+        ];
       }
       const donations = await Donation.find(query);
       res.json(fmtAll(donations));
@@ -758,8 +783,19 @@ export function startRestServer(port: number) {
   app.get('/api/donations/my_requests/', async (req: AuthenticatedRequest, res) => {
     try {
       const ngoName = req.user?.ngoProfile?.name || 'Helping Hands NGO';
+      const { search } = req.query;
       // Find all donations claimed by this NGO
-      const donations = await Donation.find({ ngo: ngoName });
+      const query: any = { ngo: ngoName };
+      if (search) {
+        const regex = new RegExp(String(search), 'i');
+        query.$or = [
+          { foodType: regex },
+          { category: regex },
+          { description: regex },
+          { pickupAddress: regex }
+        ];
+      }
+      const donations = await Donation.find(query);
       
       const formatted = donations.map((d: any) => ({
         id: d._id.toString(),
@@ -900,11 +936,56 @@ export function startRestServer(port: number) {
   // ─── NGO Needs ───
   app.get('/api/needs/', async (req, res) => {
     try {
-      const { marketplace } = req.query;
-      const query: any = {};
+      const { marketplace, search, urgency } = req.query;
+      const andConditions: any[] = [];
+
       if (marketplace === 'true') {
-        query.status = 'Open';
+        andConditions.push({ status: 'Open' });
       }
+
+      if (search) {
+        const regex = new RegExp(String(search), 'i');
+        const searchConditions: any[] = [
+          { itemName: regex },
+          { category: regex },
+          { description: regex },
+          { urgency: regex },
+          { distributionAddress: regex }
+        ];
+
+        const matchedNgos = await User.find({
+          $or: [
+            { 'ngoProfile.name': regex },
+            { username: regex }
+          ]
+        });
+        if (matchedNgos.length > 0) {
+          const ngoIds = matchedNgos.map(u => u._id);
+          searchConditions.push({ ngo: { $in: ngoIds } });
+        }
+        andConditions.push({ $or: searchConditions });
+      }
+
+      if (urgency) {
+        const urgencyStr = String(urgency).toUpperCase();
+        if (urgencyStr === 'HIGH') {
+          andConditions.push({ urgency: { $in: ['Urgent', 'High', 'URGENT', 'HIGH', 'High Priority', 'Urgent Priority'] } });
+        } else if (urgencyStr === 'URGENT') {
+          andConditions.push({ urgency: { $in: ['Urgent', 'URGENT', 'Urgent Priority'] } });
+        } else if (urgencyStr === 'MEDIUM') {
+          andConditions.push({
+            $or: [
+              { urgency: { $in: ['Medium Priority', 'Medium', 'MEDIUM'] } },
+              { urgency: { $exists: false } },
+              { urgency: null }
+            ]
+          });
+        } else if (urgencyStr === 'LOW') {
+          andConditions.push({ urgency: { $in: ['Low Priority', 'Low', 'LOW'] } });
+        }
+      }
+
+      const query = andConditions.length > 0 ? { $and: andConditions } : {};
       const needs = await Need.find(query);
       res.json(fmtAll(needs));
     } catch (err: any) {
